@@ -119,7 +119,7 @@ CREATE TABLE stg.edges_raw (
 
 # 3) Dimension Tables
 
-> Surrogate keys use `IDENTITY`. Small lookup dimensions use `DISTSTYLE ALL` for broadcast joins. Larger dimensions (customer, product) use `DISTKEY` on the business key for collocated joins.
+> Surrogate keys use `IDENTITY`. Small lookup dimensions and `dim_product` use `DISTSTYLE ALL` for broadcast joins. `dim_customer` uses `DISTKEY(customer_sk)`, the same column the customer-centric facts join on, so those joins are collocated.
 
 ```sql
 -- ========== DATE DIMENSION ==========
@@ -153,8 +153,8 @@ CREATE TABLE dw.dim_customer (
   is_current       BOOLEAN     ENCODE zstd,
   PRIMARY KEY (customer_sk)
 )
-DISTKEY(customer_id)
-SORTKEY(customer_id);
+DISTKEY(customer_sk)
+SORTKEY(customer_sk);
 
 -- ========== PRODUCT DIMENSION (SCD Type 2 ready) ==========
 DROP TABLE IF EXISTS dw.dim_product;
@@ -169,8 +169,8 @@ CREATE TABLE dw.dim_product (
   is_current             BOOLEAN     ENCODE zstd,
   PRIMARY KEY (product_sk)
 )
-DISTKEY(product_id)
-SORTKEY(product_id);
+DISTSTYLE ALL
+SORTKEY(product_sk);
 
 -- ========== CAMPAIGN DIMENSION ==========
 DROP TABLE IF EXISTS dw.dim_campaign;
@@ -380,11 +380,12 @@ SELECT product_sk, product_id FROM dw.dim_product WHERE is_current = TRUE;
 ## Distribution Keys
 - **Customer-centric facts** (`fact_orders`, `fact_events`): Distributed by `customer_sk` to collocate customer data for analytics queries
 - **Product-centric facts** (`fact_graph_edges`): Distributed by `to_product_sk` for product relationship analysis
-- **Small dimensions**: Use `DISTSTYLE ALL` for broadcast joins (no shuffling needed)
+- **Customer dimension**: `DISTKEY(customer_sk)` matches the fact join column, so joins from `fact_orders` and `fact_events` are collocated
+- **Small dimensions and `dim_product`**: Use `DISTSTYLE ALL` for broadcast joins (no shuffling needed); products are joined from three different fact columns, so a full copy per node keeps every join local
 
 ## Sort Keys
 - All fact tables sorted by date key for efficient time-range queries
-- Dimension tables sorted by business key for merge joins
+- `dim_date` sorted by `date_key`; `dim_customer` and `dim_product` sorted by their surrogate keys, the columns the facts join on
 
 ## Encoding
 - `ENCODE zstd` on most columns for optimal compression
