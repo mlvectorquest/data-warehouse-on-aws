@@ -45,8 +45,8 @@ erDiagram
     dw_dim_browser     { BIGINT browser_sk  PK  VARCHAR browser }
     dw_dim_os          { BIGINT os_sk       PK  VARCHAR os }
     dw_dim_referrer    { BIGINT referrer_sk PK  VARCHAR referrer }
-    dw_dim_shipmethod  { BIGINT shipping_method_sk PK VARCHAR shipping_method }
-    dw_dim_paymethod   { BIGINT payment_method_sk  PK VARCHAR payment_method }
+    dw_dim_shipping_method { BIGINT shipping_method_sk PK VARCHAR shipping_method }
+    dw_dim_payment_method { BIGINT payment_method_sk  PK VARCHAR payment_method }
     dw_dim_ab_variant  { BIGINT ab_variant_sk PK VARCHAR ab_variant }
 
     %% =========================
@@ -167,5 +167,5 @@ erDiagram
     dw_dim_referrer ||--o{ dw_fact_events : "referrer_sk"
     dw_dim_ab_variant ||--o{ dw_fact_events : "ab_variant_sk"
 
-    dw_dim_shipmethod ||--o{ dw_fact_orders : "shipping_method_sk"
-    dw_dim_paymethod  ||--o{ dw_fact_orders : "payment_method_sk"
+    dw_dim_shipping_method ||--o{ dw_fact_orders : "shipping_method_sk"
+    dw_dim_payment_method  ||--o{ dw_fact_orders : "payment_method_sk"
