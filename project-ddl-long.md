@@ -19,6 +19,14 @@ CREATE SCHEMA IF NOT EXISTS stg;
 CREATE SCHEMA IF NOT EXISTS dw;
 ```
 
+> Drop dependent views first so the tables below can be dropped and recreated on a re-run.
+
+```sql
+DROP VIEW IF EXISTS dw.v_lookup_customer;
+DROP VIEW IF EXISTS dw.v_lookup_product;
+DROP MATERIALIZED VIEW IF EXISTS dw.mv_daily_revenue;
+```
+
 ---
 
 # 2) Staging Tables
