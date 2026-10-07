@@ -1,6 +1,6 @@
 # Data Warehouse Build Report
 
-Generated: 2026-10-07T07:22:01.418660Z
+Generated: 2026-10-07T08:07:09.085269Z
 
 ## Schema Overview
 
@@ -262,9 +262,52 @@ erDiagram
 - Clickstream and funnel analysis by event type, session, device, referrer and A/B variant
 - Product relationship analysis from graph edges (customer-to-product and product-to-product)
 
+## Performance Findings
+
+### Distribution and sort keys applied
+```
+            table_name diststyle       distkey       sortkey1  tbl_rows applied
+     dw_dim_ab_variant       ALL           NaN            NaN         2       ✓
+        dw_dim_browser       ALL           NaN            NaN         5       ✓
+       dw_dim_campaign       ALL           NaN            NaN         7       ✓
+        dw_dim_channel       ALL           NaN            NaN         5       ✓
+       dw_dim_customer       KEY   customer_sk    customer_sk      7057       ✓
+           dw_dim_date       ALL           NaN       date_key       552       ✓
+         dw_dim_device       ALL           NaN            NaN         3       ✓
+             dw_dim_os       ALL           NaN            NaN         5       ✓
+ dw_dim_payment_method       ALL           NaN            NaN         5       ✓
+        dw_dim_product       ALL           NaN     product_sk      3360       ✓
+       dw_dim_referrer       ALL           NaN            NaN         6       ✓
+dw_dim_shipping_method       ALL           NaN            NaN         3       ✓
+        dw_fact_events       KEY   customer_sk event_date_key      2500       ✓
+   dw_fact_graph_edges       KEY to_product_sk event_date_key      2500       ✓
+        dw_fact_orders       KEY   customer_sk order_date_key      2500       ✓
+```
+
+### Materialized view vs. base fact table
+The same daily-revenue aggregation, run 5 times per source with the result cache bypassed
+(server-side elapsed time from `sys_query_history`):
+
+```
+           source  runs  avg_ms  min_ms
+       fact table     5    55.5     3.7
+materialized view     5    44.1     3.5
+```
+
+Average: fact table 55.5 ms vs materialized view 44.1 ms
+(**1.3x** faster). `ANALYZE` was run on all fact and dimension tables after loading.
+
 ## Sample Query Results
 
 ### Daily revenue (first 10 days)
+```sql
+SELECT d.date_actual, mv.revenue_usd, mv.orders, mv.avg_order_value
+FROM public.dw_mv_daily_revenue mv
+JOIN public.dw_dim_date d ON d.date_key = mv.order_date_key
+ORDER BY d.date_actual
+LIMIT 10;
+```
+
 ```
 date_actual revenue_usd  orders avg_order_value
  2024-01-01     4086.97       6          681.16
@@ -280,6 +323,14 @@ date_actual revenue_usd  orders avg_order_value
 ```
 
 ### Revenue by channel
+```sql
+SELECT ch.channel, COUNT(*) AS orders, SUM(f.order_total_usd) AS revenue_usd
+FROM public.dw_fact_orders f
+JOIN public.dw_dim_channel ch ON ch.channel_sk = f.channel_sk
+GROUP BY ch.channel
+ORDER BY revenue_usd DESC;
+```
+
 ```
     channel  orders revenue_usd
 android_app     535   224060.04
@@ -290,13 +341,20 @@ marketplace     490   199147.95
 ```
 
 ### Events by type
+```sql
+SELECT event_type, COUNT(*) AS events, COUNT(DISTINCT customer_sk) AS customers
+FROM public.dw_fact_events
+GROUP BY event_type
+ORDER BY events DESC;
 ```
-      event_type  events  sessions
-    product_view     696       696
-       page_view     641       641
-     add_to_cart     480       480
-  checkout_start     259       259
- payment_attempt     218       218
-        purchase     155       155
-return_initiated      51        51
+
+```
+      event_type  events  customers
+    product_view     696        693
+       page_view     641        636
+     add_to_cart     480        479
+  checkout_start     259        259
+ payment_attempt     218        218
+        purchase     155        155
+return_initiated      51         51
 ```
